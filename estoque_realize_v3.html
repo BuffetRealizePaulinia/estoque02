@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Realize — Estoque</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f0; min-height: 100vh; padding: 1rem; }
+.app { max-width: 640px; margin: 0 auto; background: white; border-radius: 16px; padding: 1.2rem; box-shadow: 0 2px 16px rgba(0,0,0,0.08); }
+.header { text-align: center; padding: 0.6rem 0 0.8rem; border-bottom: 1px solid #eee; margin-bottom: 1rem; }
+.header h1 { font-size: 16px; font-weight: 700; color: #1a1a1a; }
+.header p { font-size: 11px; color: #888; margin-top: 2px; }
+
+/* TABS PRINCIPAIS */
+.main-tabs { display: flex; gap: 5px; margin-bottom: 1rem; flex-wrap: wrap; }
+.main-tab { flex: 1; min-width: 80px; padding: 8px 4px; font-size: 11px; font-weight: 700; border-radius: 10px; cursor: pointer; border: none; transition: all 0.2s; background: #f0f0f0; color: #888; text-align: center; }
+.main-tab.active { color: white; }
+.main-tab[data-cat="Bar"].active { background: #2196F3; }
+.main-tab[data-cat="Cozinha"].active { background: #FF7043; }
+.main-tab[data-cat="Descartaveis"].active { background: #9C27B0; }
+.main-tab[data-cat="ESTOQUE"].active { background: #1D9E75; }
+.main-tab[data-cat="Diversos"].active { background: #F9A825; }
+.main-tab[data-cat="Lista"].active { background: #37474F; }
+.main-tab[data-cat="Historico"].active { background: #546E7A; }
+
+.page { display: none; }
+.page.v { display: block; }
+
+/* ESTOQUE */
+.search-box { margin-bottom: 0.8rem; }
+.search-box input { width: 100%; padding: 9px 12px; font-size: 14px; border: 1px solid #ddd; border-radius: 10px; font-family: inherit; }
+.search-box input:focus { outline: none; border-color: #1D9E75; }
+.item-row { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-bottom: 0.5px solid #f0f0f0; }
+.item-row:last-child { border-bottom: none; }
+.item-name { flex: 1; font-size: 14px; color: #1a1a1a; }
+.qty-input { width: 60px; padding: 6px 8px; font-size: 14px; border: 1px solid #ddd; border-radius: 8px; text-align: center; font-family: inherit; }
+.qty-input:focus { outline: none; border-color: #1D9E75; }
+.btn-x { width: 30px; height: 30px; border-radius: 8px; border: none; background: #fff0f0; color: #e53935; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.btn-x:active { background: #ffcdd2; }
+.contador { font-size: 11px; color: #888; margin-bottom: 0.5rem; }
+.btn-salvar { width: 100%; padding: 12px; font-size: 14px; font-weight: 700; border-radius: 12px; border: none; background: #1D9E75; color: white; cursor: pointer; margin-top: 1rem; }
+.btn-salvar:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-reiniciar { width: 100%; padding: 11px; font-size: 13px; font-weight: 700; border-radius: 12px; border: 2px solid #e53935; background: white; color: #e53935; cursor: pointer; margin-top: 0.6rem; }
+.status { font-size: 12px; color: #1D9E75; text-align: center; margin-top: 6px; min-height: 16px; }
+
+/* LISTA UNIFICADA */
+.cat-section { margin-bottom: 1rem; border-radius: 10px; overflow: hidden; }
+.cat-header { padding: 8px 12px; font-size: 12px; font-weight: 700; color: white; }
+.cat-header.bar { background: #2196F3; }
+.cat-header.cozinha { background: #FF7043; }
+.cat-header.descartaveis { background: #9C27B0; }
+.cat-header.estoque { background: #1D9E75; }
+.cat-header.diversos { background: #F9A825; color: #333; }
+.cat-body { border: 1px solid #eee; border-top: none; border-radius: 0 0 10px 10px; }
+.lista-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 0.5px solid #f5f5f5; }
+.lista-item:last-child { border-bottom: none; }
+.lista-qty { color: white; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 2px 8px; min-width: 38px; text-align: center; }
+.lista-qty.bar { background: #2196F3; }
+.lista-qty.cozinha { background: #FF7043; }
+.lista-qty.descartaveis { background: #9C27B0; }
+.lista-qty.estoque { background: #1D9E75; }
+.lista-qty.diversos { background: #F9A825; color: #333; }
+.lista-nome { flex: 1; font-size: 14px; color: #1a1a1a; }
+.obs-box { margin-top: 1rem; }
+.obs-box label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px; }
+.obs-box textarea { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid #ddd; border-radius: 10px; font-family: inherit; resize: vertical; min-height: 70px; }
+.empty { text-align: center; padding: 2rem 1rem; color: #aaa; font-size: 14px; }
+
+/* HISTORICO */
+.hist-card { background: #f9f9f9; border: 1px solid #eee; border-radius: 12px; padding: 1rem; margin-bottom: 0.8rem; }
+.hist-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+.hist-data { font-size: 12px; font-weight: 700; color: #555; }
+.hist-actions { display: flex; gap: 6px; }
+.hist-btn { padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; cursor: pointer; border: none; }
+.hist-btn.copiar { background: #e3f2fd; color: #1565C0; }
+.hist-btn.reusar { background: #e8f5e9; color: #2E7D32; }
+.hist-btn.excluir { background: #ffebee; color: #c62828; }
+.hist-cat-label { font-size: 11px; font-weight: 700; color: white; padding: 2px 8px; border-radius: 4px; margin: 6px 0 3px; display: inline-block; }
+.hist-item { font-size: 13px; color: #333; padding: 2px 0; display: flex; gap: 8px; }
+.hist-qty { font-weight: 700; min-width: 28px; }
+.hist-obs { font-size: 12px; color: #888; margin-top: 6px; font-style: italic; }
+.hist-total { font-size: 11px; color: #888; margin-top: 4px; }
+
+/* MODAL */
+.modal-bg { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 100; }
+.modal-bg.v { display: flex; align-items: center; justify-content: center; }
+.modal { background: white; border-radius: 16px; padding: 1.5rem; max-width: 300px; width: 88%; text-align: center; }
+.modal h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.modal p { font-size: 13px; color: #666; margin-bottom: 1.2rem; line-height: 1.5; }
+.modal-btns { display: flex; gap: 10px; }
+.modal-btns button { flex: 1; padding: 11px; font-size: 13px; font-weight: 600; border-radius: 10px; cursor: pointer; border: none; }
+.btn-conf { background: #e53935; color: white; }
+.btn-canc { background: #f0f0f0; color: #333; }
+.badge-total { display: inline-block; background: #37474F; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Realize Festas 🛒</h1>
+    <p>Controle de Estoque</p>
+  </div>
+
+  <div class="main-tabs">
+    <button class="main-tab active" data-cat="Bar" onclick="irCat('Bar')">🍺 Bar</button>
+    <button class="main-tab" data-cat="Cozinha" onclick="irCat('Cozinha')">🍳 Cozinha</button>
+    <button class="main-tab" data-cat="Descartaveis" onclick="irCat('Descartaveis')">🧴 Descart.</button>
+    <button class="main-tab" data-cat="ESTOQUE" onclick="irCat('ESTOQUE')">🎈 Estoque</button>
+    <button class="main-tab" data-cat="Diversos" onclick="irCat('Diversos')">📦 Diversos</button>
+    <button class="main-tab" data-cat="Lista" onclick="irCat('Lista')">🛒 Lista <span id="badgeTotal" class="badge-total" style="display:none">0</span></button>
+    <button class="main-tab" data-cat="Historico" onclick="irCat('Historico')">📋 Hist.</button>
+  </div>
+
+  <!-- PÁGINAS DE ESTOQUE -->
+  <div class="page v" id="pag-Bar">
+    <div class="search-box"><input type="text" id="busca-Bar" placeholder="🔍 Buscar..." oninput="filtrar('Bar')"></div>
+    <div class="contador" id="contador-Bar"></div>
+    <div id="lista-Bar"></div>
+    <button class="btn-salvar" id="btnSalvar-Bar" onclick="salvarCat('Bar')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('Bar')">🔄 Reiniciar Bar</button>
+    <div class="status" id="status-Bar"></div>
+  </div>
+
+  <div class="page" id="pag-Cozinha">
+    <div class="search-box"><input type="text" id="busca-Cozinha" placeholder="🔍 Buscar..." oninput="filtrar('Cozinha')"></div>
+    <div class="contador" id="contador-Cozinha"></div>
+    <div id="lista-Cozinha"></div>
+    <button class="btn-salvar" id="btnSalvar-Cozinha" onclick="salvarCat('Cozinha')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('Cozinha')">🔄 Reiniciar Cozinha</button>
+    <div class="status" id="status-Cozinha"></div>
+  </div>
+
+  <div class="page" id="pag-Descartaveis">
+    <div class="search-box"><input type="text" id="busca-Descartaveis" placeholder="🔍 Buscar..." oninput="filtrar('Descartaveis')"></div>
+    <div class="contador" id="contador-Descartaveis"></div>
+    <div id="lista-Descartaveis"></div>
+    <button class="btn-salvar" id="btnSalvar-Descartaveis" onclick="salvarCat('Descartaveis')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('Descartaveis')">🔄 Reiniciar Descartáveis</button>
+    <div class="status" id="status-Descartaveis"></div>
+  </div>
+
+  <div class="page" id="pag-ESTOQUE">
+    <div class="search-box"><input type="text" id="busca-ESTOQUE" placeholder="🔍 Buscar..." oninput="filtrar('ESTOQUE')"></div>
+    <div class="contador" id="contador-ESTOQUE"></div>
+    <div id="lista-ESTOQUE"></div>
+    <button class="btn-salvar" id="btnSalvar-ESTOQUE" onclick="salvarCat('ESTOQUE')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('ESTOQUE')">🔄 Reiniciar Estoque</button>
+    <div class="status" id="status-ESTOQUE"></div>
+  </div>
+
+  <div class="page" id="pag-Diversos">
+    <div class="search-box"><input type="text" id="busca-Diversos" placeholder="🔍 Buscar..." oninput="filtrar('Diversos')"></div>
+    <div class="contador" id="contador-Diversos"></div>
+    <div id="lista-Diversos"></div>
+    <button class="btn-salvar" id="btnSalvar-Diversos" onclick="salvarCat('Diversos')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('Diversos')">🔄 Reiniciar Diversos</button>
+    <div class="status" id="status-Diversos"></div>
+  </div>
+
+  <!-- LISTA UNIFICADA -->
+  <div class="page" id="pag-Lista">
+    <div id="listaUnificada"></div>
+    <div class="obs-box">
+      <label>Anotações</label>
+      <textarea id="obsLista" placeholder="Observações gerais..."></textarea>
+    </div>
+    <div class="status" id="status-Lista"></div>
+  </div>
+
+  <!-- HISTÓRICO -->
+  <div class="page" id="pag-Historico">
+    <div id="listaHistorico"></div>
+  </div>
+</div>
+
+<!-- MODAIS -->
+<div class="modal-bg" id="modalReiniciar">
+  <div class="modal">
+    <h3>Reiniciar lista?</h3>
+    <p id="modalReiniciarTexto">A lista será salva no histórico. Todos os itens voltarão e as quantidades serão zeradas.</p>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalReiniciar')">Cancelar</button>
+      <button class="btn-conf" onclick="reiniciarCat()">Reiniciar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalExcluirHist">
+  <div class="modal">
+    <h3>Excluir histórico?</h3>
+    <p>Esta ação não pode ser desfeita.</p>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalExcluirHist')">Cancelar</button>
+      <button class="btn-conf" onclick="confirmarExcluirHist()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCIiiqa84itJt67tpORk0r8paAOdd9T45E",
+  authDomain: "realize-estoque.firebaseapp.com",
+  databaseURL: "https://realize-estoque-default-rtdb.firebaseio.com",
+  projectId: "realize-estoque",
+  storageBucket: "realize-estoque.firebasestorage.app",
+  messagingSenderId: "1043336570917",
+  appId: "1:1043336570917:web:dee8f144016f0c692d37cc"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db = getDatabase(fbApp);
+
+const CATS = {
+  Bar: ["COCA COLA 2LTS","GUARANA 2 LTS","COCA ZERO 2 LTS","AGUA 1,5 LTS","SUCO LARANJA","SUCO UVA","PAPEL BAR"],
+  Cozinha: ["SAZOM CARNE","CANELA","OREGANO","MANGERICAO","OLEO","PAO DOG","PIPOCA DOCE","PAO DE HAMB.","SAZOM SALADAS","MASSA PIZZA","PAPEL COAR CAFÉ","ARROZ","SAL","BATATA PALHA","PO CAFÉ","ACUCAR","FARINHA YOKI","FEIJAO","MAIONESE","CAT CHUP GRANDE","MOSTARDA","AZEITE","MOLHO TOMATE","CREME DE LEITE","AZEITONAS","GELATINA MORANGO","GELATINA AZUL","GELATINA UVA","GELATINA DENTADURA","GELATINA BANANA","CATCHUP SACHE","PIMENTA","QUEIJO RALADO","PALITO DENTE","BATOM","FERMENTO","LEITE","VINAGRE","PIPOCA","MACARRAO","MOLHO SUGO","MAISENA","FARINHA TRIGO","CALABRESA","TOMATE","CEBOLA","LIMAO","CENOURA","ALHO","BATATA PURE","OVOS","MANTEIGA","QUEIJO CHEDDAR","CHEIRO VERDE","MUSSARELA","PRESUNTO","ALFACE","MISTURA","BATATA FRITAS","SALCIXA","HAMBURGUER","PAO DE QUEIJO","GELO","CHURROS","GELADINHO","PEITO DE FRANGO","SALGADOS ASSADOS","PASTEL","COXINHA","PRES. E QUEIJO","KIBE","CROQUETE","BOL QUEIJO","BOL CARNE","MILHO","REQUEIJAO"],
+  Descartaveis: ["PAPEL ROLO","DESINFETANTE","KIT MAE","KIT DOCES MAE","GARFO PIZZA","PAPEL ALUM","PLASTICO PIZZA","PLASTICO FILME","PERFLEX","GARFO BOLO","PRATINHO BOLO","PRATO JANTA","TOUCA","COPO GELATINA","COPO DESC","COLHER GELATINA","SACOLA KIT MÃE","LUVA P","LUVA M","LUVA G","LUVA GG","SACO HAMB","SACO PIPOCA","SACO PLASTICO","PAPEL SECA MAO","SANITO 50L","SANITO REFORÇADO","SANITO BANHEIRO","BOMBRIL","BOM AR","VENENO","DETERGENTE","CANDIDA","BUCHA AMARELA","PAPEL HIGIENICO","SABONETE LIQUIDO","VEJA","ALCOOL GEL","ALGOOL LIQUIDO","SABAO PEDRA"],
+  ESTOQUE: ["FITILHO","VELA 0","VELA 1","VELA 2","VELA 3","VELA 4","VELA 5","VELA 6","VELA 7","VELA 8","VELA 9","BALÃO BRANCO","BALÃO PRETO","BALÃO VERMELHO","BALÃO AZUL COBALTO","BALÃO AZUL TURQUEZA","BALÃO AZUL BB","BALÃO ROSA BB","BALÃO TUTIFRUTTI","BALÃO PINK","BALÃO AMARELO","BALÃO LARANJA","BALÃO VERDE FOLHA","BALÃO VERDE MAÇA","BALÃO ROXO","BALÃO LILAS","BALÃO MARROM"],
+  Diversos: ["FONE RADIO","PILHAS","ETIQUETA PRESENTE","ETIQUETA VALIDADE","FITILHO","BAND-AID","REMEDIOS","FITA ADESIVA AMARELA","FITA ADESIVA TRANSP.","FOLHA DE PRESENÇA","FOLHA DE CONVIDADOS"]
+};
+
+const CAT_CORES = { Bar:'bar', Cozinha:'cozinha', Descartaveis:'descartaveis', ESTOQUE:'estoque', Diversos:'diversos' };
+const CAT_NOMES = { Bar:'🍺 Bar', Cozinha:'🍳 Cozinha', Descartaveis:'🧴 Descartáveis', ESTOQUE:'🎈 Estoque', Diversos:'📦 Diversos' };
+
+// Estado por categoria
+let estado = {};
+Object.keys(CATS).forEach(cat => {
+  estado[cat] = { visiveis: [...CATS[cat]], qtds: {}, lista: [] };
+});
+let obsTexto = '';
+let catReiniciar = null;
+let histKeyExcluir = null;
+
+// RENDER ESTOQUE
+function renderCat(cat) {
+  const busca = (document.getElementById('busca-'+cat)?.value||'').toLowerCase();
+  const e = estado[cat];
+  const filtrados = CATS[cat].filter(i => e.visiveis.includes(i) && i.toLowerCase().includes(busca));
+  document.getElementById('contador-'+cat).textContent = `${e.visiveis.length} itens`;
+  document.getElementById('lista-'+cat).innerHTML = filtrados.length ? filtrados.map(item => `
+    <div class="item-row">
+      <span class="item-name">${item}</span>
+      <input class="qty-input" type="number" min="0" placeholder="Qtd" value="${e.qtds[item]||''}"
+        oninput="setQtd('${cat}','${item.replace(/'/g,"\\'")}',this.value)">
+      <button class="btn-x" onclick="removerItem('${cat}','${item.replace(/'/g,"\\'")}')">✕</button>
+    </div>`).join('') : '<div class="empty">Nenhum item</div>';
+}
+
+// RENDER LISTA UNIFICADA
+function renderLista() {
+  let total = 0;
+  let html = '';
+  Object.keys(CATS).forEach(cat => {
+    const itens = estado[cat].lista;
+    if(itens.length === 0) return;
+    total += itens.length;
+    const cor = CAT_CORES[cat];
+    html += `<div class="cat-section">
+      <div class="cat-header ${cor}">${CAT_NOMES[cat]} — ${itens.length} itens</div>
+      <div class="cat-body">
+        ${itens.map((it,i) => `
+          <div class="lista-item">
+            <span class="lista-qty ${cor}">${it.qty}</span>
+            <span class="lista-nome">${it.nome}</span>
+            <button class="btn-x" onclick="removerDaLista('${cat}',${i})">✕</button>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  });
+  document.getElementById('listaUnificada').innerHTML = html || '<div class="empty">Nenhum item na lista.<br>Preencha as quantidades nas categorias.</div>';
+  document.getElementById('obsLista').value = obsTexto;
+  // Badge
+  const badge = document.getElementById('badgeTotal');
+  if(total > 0){ badge.style.display='inline'; badge.textContent=total; }
+  else badge.style.display='none';
+}
+
+// RENDER HISTORICO
+async function renderHistorico() {
+  const div = document.getElementById('listaHistorico');
+  div.innerHTML = '<div class="empty">Carregando...</div>';
+  try {
+    const snap = await get(ref(db,'estoque2/historico'));
+    if(!snap.exists()){ div.innerHTML='<div class="empty">Nenhum histórico ainda.</div>'; return; }
+    const dados = snap.val();
+    const chaves = Object.keys(dados).reverse();
+    div.innerHTML = chaves.map(k => {
+      const h = dados[k];
+      const cats = h.categorias || {};
+      let itensHtml = '';
+      Object.keys(cats).forEach(cat => {
+        const itens = cats[cat] || [];
+        if(!itens.length) return;
+        const cor = CAT_CORES[cat] || 'estoque';
+        itensHtml += `<span class="hist-cat-label" style="background:${corHex(cat)}">${CAT_NOMES[cat]||cat}</span>`;
+        itensHtml += itens.map(it=>`<div class="hist-item"><span class="hist-qty" style="color:${corHex(cat)}">${it.qty}x</span><span>${it.nome}</span></div>`).join('');
+      });
+      const totalItens = Object.values(cats).reduce((s,arr)=>s+(arr||[]).length,0);
+      return `<div class="hist-card">
+        <div class="hist-header">
+          <span class="hist-data">📅 ${h.data} <span style="font-weight:400;color:#888">${totalItens} itens</span></span>
+          <div class="hist-actions">
+            <button class="hist-btn copiar" onclick="copiarHist('${k}')">📋 Copiar</button>
+            <button class="hist-btn reusar" onclick="reusarHist('${k}')">♻️ Reusar</button>
+            <button class="hist-btn excluir" onclick="pedirExcluirHist('${k}')">🗑️ Excluir</button>
+          </div>
+        </div>
+        ${itensHtml}
+        ${h.obs?`<div class="hist-obs">📝 ${h.obs}</div>`:''}
+      </div>`;
+    }).join('');
+    window._histDados = dados;
+  } catch(e){ div.innerHTML='<div class="empty">Erro ao carregar.</div>'; }
+}
+
+function corHex(cat){
+  const m = {Bar:'#2196F3',Cozinha:'#FF7043',Descartaveis:'#9C27B0',ESTOQUE:'#1D9E75',Diversos:'#F9A825'};
+  return m[cat]||'#666';
+}
+
+// AÇÕES
+window.setQtd = (cat,item,val) => {
+  if(val && parseInt(val)>0) estado[cat].qtds[item]=parseInt(val);
+  else delete estado[cat].qtds[item];
+}
+
+window.removerItem = (cat,item) => {
+  estado[cat].visiveis = estado[cat].visiveis.filter(i=>i!==item);
+  delete estado[cat].qtds[item];
+  renderCat(cat);
+}
+
+window.filtrar = (cat) => renderCat(cat);
+
+window.salvarCat = async (cat) => {
+  const btn = document.getElementById('btnSalvar-'+cat);
+  btn.disabled=true; btn.textContent='Salvando...';
+  estado[cat].lista = Object.entries(estado[cat].qtds).filter(([,v])=>v>0).map(([nome,qty])=>({nome,qty}));
+  await salvarFirebase();
+  document.getElementById('status-'+cat).textContent='✓ Salvo!';
+  setTimeout(()=>document.getElementById('status-'+cat).textContent='',2500);
+  btn.disabled=false; btn.textContent='Salvar lista →';
+  renderLista();
+}
+
+window.removerDaLista = async (cat,i) => {
+  estado[cat].lista.splice(i,1);
+  renderLista();
+  await salvarFirebase();
+}
+
+async function salvarFirebase() {
+  const payload = {};
+  Object.keys(CATS).forEach(cat => {
+    payload[cat] = { visiveis: estado[cat].visiveis, qtds: estado[cat].qtds, lista: estado[cat].lista };
+  });
+  payload.obs = obsTexto;
+  await set(ref(db,'estoque2/dados'), payload);
+}
+
+document.getElementById('obsLista').addEventListener('input', function(){
+  obsTexto=this.value;
+  clearTimeout(window._t);
+  window._t=setTimeout(salvarFirebase,1000);
+});
+
+// REINICIAR
+window.confirmarReiniciar = (cat) => {
+  catReiniciar = cat;
+  document.getElementById('modalReiniciarTexto').textContent =
+    cat === 'TODOS'
+    ? 'Todas as listas serão salvas no histórico e zeradas.'
+    : `A lista de ${CAT_NOMES[cat]||cat} será salva no histórico e zerada.`;
+  document.getElementById('modalReiniciar').classList.add('v');
+}
+
+window.reiniciarCat = async () => {
+  fecharModal('modalReiniciar');
+  const cat = catReiniciar;
+  const agora = new Date();
+  const data = agora.toLocaleDateString('pt-BR')+' '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+  // Salva no histórico
+  const catsParaSalvar = cat === 'TODOS' ? Object.keys(CATS) : [cat];
+  const temItens = catsParaSalvar.some(c => estado[c].lista.length > 0);
+  if(temItens || obsTexto) {
+    const categorias = {};
+    catsParaSalvar.forEach(c => { categorias[c] = estado[c].lista; });
+    await push(ref(db,'estoque2/historico'),{data, categorias, obs:obsTexto, salvoEm:agora.toISOString()});
+  }
+
+  // Reinicia
+  catsParaSalvar.forEach(c => {
+    estado[c].visiveis = [...CATS[c]];
+    estado[c].qtds = {};
+    estado[c].lista = [];
+    document.getElementById('busca-'+c).value='';
+    renderCat(c);
+    document.getElementById('status-'+c).textContent='✓ Reiniciado!';
+    setTimeout(()=>document.getElementById('status-'+c).textContent='',2500);
+  });
+  if(cat==='TODOS') obsTexto='';
+  await salvarFirebase();
+  renderLista();
+}
+
+// HISTÓRICO AÇÕES
+window.copiarHist = (key) => {
+  const h = window._histDados[key];
+  const cats = h.categorias || {};
+  let texto = `📋 Lista de Compras — ${h.data}\n\n`;
+  Object.keys(cats).forEach(cat => {
+    const itens = cats[cat]||[];
+    if(!itens.length) return;
+    texto += `${CAT_NOMES[cat]||cat}:\n`;
+    itens.forEach(it => { texto += `  ${it.qty}x ${it.nome}\n`; });
+    texto += '\n';
+  });
+  if(h.obs) texto += `📝 ${h.obs}`;
+  navigator.clipboard.writeText(texto).then(()=>alert('✓ Lista copiada!')).catch(()=>alert('Copie manualmente:\n'+texto));
+}
+
+window.reusarHist = async (key) => {
+  const h = window._histDados[key];
+  const cats = h.categorias || {};
+  Object.keys(cats).forEach(cat => {
+    if(!CATS[cat]) return;
+    const itens = cats[cat]||[];
+    itens.forEach(it => {
+      if(CATS[cat].includes(it.nome)){
+        estado[cat].qtds[it.nome] = it.qty;
+        if(!estado[cat].visiveis.includes(it.nome)) estado[cat].visiveis.push(it.nome);
+      }
+    });
+    renderCat(cat);
+  });
+  await salvarFirebase();
+  alert('✓ Quantidades restauradas! Verifique cada categoria.');
+}
+
+window.pedirExcluirHist = (key) => {
+  histKeyExcluir = key;
+  document.getElementById('modalExcluirHist').classList.add('v');
+}
+
+window.confirmarExcluirHist = async () => {
+  fecharModal('modalExcluirHist');
+  await remove(ref(db,`estoque2/historico/${histKeyExcluir}`));
+  renderHistorico();
+}
+
+window.fecharModal = (id) => document.getElementById(id).classList.remove('v');
+
+// NAVEGAÇÃO
+window.irCat = (cat) => {
+  document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-cat="${cat}"]`).classList.add('active');
+  Object.keys(CATS).forEach(c => document.getElementById('pag-'+c).classList.remove('v'));
+  document.getElementById('pag-Lista').classList.remove('v');
+  document.getElementById('pag-Historico').classList.remove('v');
+  if(cat==='Lista'){ document.getElementById('pag-Lista').classList.add('v'); renderLista(); }
+  else if(cat==='Historico'){ document.getElementById('pag-Historico').classList.add('v'); renderHistorico(); }
+  else { document.getElementById('pag-'+cat).classList.add('v'); renderCat(cat); }
+}
+
+// CARREGAR
+async function carregarDados() {
+  try {
+    const snap = await get(ref(db,'estoque2/dados'));
+    if(snap.exists()){
+      const d = snap.val();
+      Object.keys(CATS).forEach(cat => {
+        if(d[cat]){
+          if(d[cat].visiveis) estado[cat].visiveis = d[cat].visiveis;
+          if(d[cat].qtds) estado[cat].qtds = d[cat].qtds;
+          if(d[cat].lista) estado[cat].lista = d[cat].lista;
+        }
+      });
+      if(d.obs) obsTexto = d.obs;
+    }
+  } catch(e){}
+  renderCat('Bar');
+  // Atualiza badge
+  let total = Object.keys(CATS).reduce((s,c)=>s+estado[c].lista.length,0);
+  const badge = document.getElementById('badgeTotal');
+  if(total>0){badge.style.display='inline';badge.textContent=total;}
+}
+
+carregarDados();
+</script>
+</body>
+</html>
