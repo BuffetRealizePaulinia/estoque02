@@ -93,6 +93,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .btn-conf { background: #e53935; color: white; }
 .btn-canc { background: #f0f0f0; color: #333; }
 .badge-total { display: inline-block; background: #37474F; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
+.btn-reiniciar-todas { width: 100%; padding: 12px; font-size: 13px; font-weight: 700; border-radius: 12px; border: 2px solid #B71C1C; background: #fff; color: #B71C1C; cursor: pointer; margin-top: 0.5rem; }
+.btn-reiniciar-todas:active { background: #ffebee; }
+.hist-reusar-lista { padding: 8px 12px; border: 1px solid #eee; border-radius: 8px; margin: 4px 0; display: flex; align-items: center; gap: 8px; }
+.hist-reusar-lista .remove-hist-item { width: 24px; height: 24px; border-radius: 6px; border: none; background: #fff0f0; color: #e53935; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.modal-lg { max-width: 420px !important; text-align: left !important; }
+.modal-lg h3 { text-align: center; }
+.modal-scroll { max-height: 55vh; overflow-y: auto; margin-bottom: 1rem; }
+.conf-step { background: #fff3e0; border: 1px solid #FFB300; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; text-align: center; }
+.conf-step p { font-size: 14px; color: #333; margin-bottom: 0.8rem; }
 </style>
 </head>
 <body>
@@ -119,6 +128,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div id="lista-Bar"></div>
     <button class="btn-salvar" id="btnSalvar-Bar" onclick="salvarCat('Bar')">Salvar lista →</button>
     <button class="btn-reiniciar" onclick="confirmarReiniciar('Bar')">🔄 Reiniciar Bar</button>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
     <div class="status" id="status-Bar"></div>
   </div>
 
@@ -128,6 +138,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div id="lista-Cozinha"></div>
     <button class="btn-salvar" id="btnSalvar-Cozinha" onclick="salvarCat('Cozinha')">Salvar lista →</button>
     <button class="btn-reiniciar" onclick="confirmarReiniciar('Cozinha')">🔄 Reiniciar Cozinha</button>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
     <div class="status" id="status-Cozinha"></div>
   </div>
 
@@ -146,6 +157,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div id="lista-ESTOQUE"></div>
     <button class="btn-salvar" id="btnSalvar-ESTOQUE" onclick="salvarCat('ESTOQUE')">Salvar lista →</button>
     <button class="btn-reiniciar" onclick="confirmarReiniciar('ESTOQUE')">🔄 Reiniciar Estoque</button>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
     <div class="status" id="status-ESTOQUE"></div>
   </div>
 
@@ -155,6 +167,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div id="lista-Diversos"></div>
     <button class="btn-salvar" id="btnSalvar-Diversos" onclick="salvarCat('Diversos')">Salvar lista →</button>
     <button class="btn-reiniciar" onclick="confirmarReiniciar('Diversos')">🔄 Reiniciar Diversos</button>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
     <div class="status" id="status-Diversos"></div>
   </div>
 
@@ -165,6 +178,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <label>Anotações</label>
       <textarea id="obsLista" placeholder="Observações gerais..."></textarea>
     </div>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
     <div class="status" id="status-Lista"></div>
   </div>
 
@@ -193,6 +207,46 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="modal-btns">
       <button class="btn-canc" onclick="fecharModal('modalExcluirHist')">Cancelar</button>
       <button class="btn-conf" onclick="confirmarExcluirHist()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REUSAR HISTORICO -->
+<div class="modal-bg" id="modalReusarHist">
+  <div class="modal modal-lg">
+    <h3>♻️ Reusar lista</h3>
+    <p style="font-size:12px;color:#888;margin-bottom:0.8rem;text-align:center">Remova os itens que não quer reusar, depois confirme.</p>
+    <div class="modal-scroll" id="reusarListaItens"></div>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalReusarHist')">Cancelar</button>
+      <button class="hist-btn reusar" style="flex:1;padding:11px;font-size:13px;font-weight:700;border-radius:10px;" onclick="confirmarReusar()">✓ Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REINICIAR TODAS - PASSO 1 -->
+<div class="modal-bg" id="modalTodasP1">
+  <div class="modal">
+    <div class="conf-step">
+      <p>⚠️ <strong>Atenção!</strong><br>Você está prestes a reiniciar <strong>TODAS</strong> as 5 listas de estoque.<br><br>Todas as quantidades e itens removidos serão zerados.</p>
+      <p style="font-size:12px;color:#888">Esta ação salvará as listas atuais no histórico antes de zerar.</p>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalTodasP1')">Cancelar</button>
+      <button class="btn-conf" onclick="irPassoDois()">Continuar →</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REINICIAR TODAS - PASSO 2 -->
+<div class="modal-bg" id="modalTodasP2">
+  <div class="modal">
+    <div class="conf-step" style="background:#ffebee;border-color:#e53935">
+      <p>🚨 <strong>Última confirmação!</strong><br>Tem certeza absoluta que deseja reiniciar <strong>TODAS as listas</strong>?<br><br>Esta ação não pode ser desfeita.</p>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalTodasP2')">Não, cancelar</button>
+      <button class="btn-conf" onclick="reiniciarTodas()">Sim, reiniciar tudo</button>
     </div>
   </div>
 </div>
@@ -423,13 +477,52 @@ window.copiarHist = (key) => {
   navigator.clipboard.writeText(texto).then(()=>alert('✓ Lista copiada!')).catch(()=>alert('Copie manualmente:\n'+texto));
 }
 
-window.reusarHist = async (key) => {
+let reusarKeyAtual = null;
+let reusarItensTemp = {};
+
+window.reusarHist = (key) => {
+  reusarKeyAtual = key;
   const h = window._histDados[key];
   const cats = h.categorias || {};
+  // Copia profunda dos itens para edição
+  reusarItensTemp = {};
   Object.keys(cats).forEach(cat => {
+    reusarItensTemp[cat] = (cats[cat]||[]).map(it => ({...it}));
+  });
+  renderReusarModal();
+  document.getElementById('modalReusarHist').classList.add('v');
+}
+
+function renderReusarModal() {
+  let html = '';
+  Object.keys(reusarItensTemp).forEach(cat => {
+    const itens = reusarItensTemp[cat].filter(it => !it._removido);
+    if(!itens.length) return;
+    html += `<div style="margin-bottom:0.6rem">
+      <div style="font-size:11px;font-weight:700;color:white;background:${corHex(cat)};padding:3px 8px;border-radius:4px;display:inline-block;margin-bottom:4px">${CAT_NOMES[cat]||cat}</div>`;
+    reusarItensTemp[cat].forEach((it, i) => {
+      if(it._removido) return;
+      html += `<div class="hist-reusar-lista">
+        <span style="font-weight:700;color:${corHex(cat)};min-width:32px">${it.qty}x</span>
+        <span style="flex:1;font-size:13px">${it.nome}</span>
+        <button class="remove-hist-item" onclick="removerItemReusar('${cat}',${i})">✕</button>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  document.getElementById('reusarListaItens').innerHTML = html || '<div class="empty">Nenhum item</div>';
+}
+
+window.removerItemReusar = (cat, i) => {
+  reusarItensTemp[cat][i]._removido = true;
+  renderReusarModal();
+}
+
+window.confirmarReusar = async () => {
+  fecharModal('modalReusarHist');
+  Object.keys(reusarItensTemp).forEach(cat => {
     if(!CATS[cat]) return;
-    const itens = cats[cat]||[];
-    itens.forEach(it => {
+    reusarItensTemp[cat].filter(it => !it._removido).forEach(it => {
       if(CATS[cat].includes(it.nome)){
         estado[cat].qtds[it.nome] = it.qty;
         if(!estado[cat].visiveis.includes(it.nome)) estado[cat].visiveis.push(it.nome);
@@ -453,6 +546,38 @@ window.confirmarExcluirHist = async () => {
 }
 
 window.fecharModal = (id) => document.getElementById(id).classList.remove('v');
+
+window.pedirReiniciarTodas = () => {
+  document.getElementById('modalTodasP1').classList.add('v');
+}
+
+window.irPassoDois = () => {
+  fecharModal('modalTodasP1');
+  document.getElementById('modalTodasP2').classList.add('v');
+}
+
+window.reiniciarTodas = async () => {
+  fecharModal('modalTodasP2');
+  const agora = new Date();
+  const data = agora.toLocaleDateString('pt-BR')+' '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const temItens = Object.keys(CATS).some(c => estado[c].lista.length > 0);
+  if(temItens || obsTexto) {
+    const categorias = {};
+    Object.keys(CATS).forEach(c => { categorias[c] = estado[c].lista; });
+    await push(ref(db,'estoque2/historico'),{data, categorias, obs:obsTexto, salvoEm:agora.toISOString()});
+  }
+  Object.keys(CATS).forEach(c => {
+    estado[c].visiveis = [...CATS[c]];
+    estado[c].qtds = {};
+    estado[c].lista = [];
+    if(document.getElementById('busca-'+c)) document.getElementById('busca-'+c).value='';
+  });
+  obsTexto = '';
+  await salvarFirebase();
+  renderCat('Bar');
+  renderLista();
+  alert('✓ Todas as listas foram reiniciadas e salvas no histórico!');
+}
 
 // NAVEGAÇÃO
 window.irCat = (cat) => {
