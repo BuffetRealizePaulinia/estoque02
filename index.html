@@ -12,6 +12,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .header h1 { font-size: 16px; font-weight: 700; color: #1a1a1a; }
 .header p { font-size: 11px; color: #888; margin-top: 2px; }
 
+/* SYNC STATUS BAR */
+.sync-bar { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 8px; margin-bottom: 0.8rem; transition: all 0.3s; }
+.sync-bar.online  { background: #e8f5e9; color: #2E7D32; }
+.sync-bar.offline { background: #fff3e0; color: #E65100; }
+.sync-bar.syncing { background: #e3f2fd; color: #1565C0; }
+.sync-bar.pending { background: #fff8e1; color: #F57F17; }
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sync-bar.online  .sync-dot { background: #43A047; }
+.sync-bar.offline .sync-dot { background: #EF6C00; animation: pulse 1.2s infinite; }
+.sync-bar.syncing .sync-dot { background: #1976D2; animation: pulse 0.6s infinite; }
+.sync-bar.pending .sync-dot { background: #F9A825; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
 /* TABS PRINCIPAIS */
 .main-tabs { display: flex; gap: 5px; margin-bottom: 1rem; flex-wrap: wrap; }
 .main-tab { flex: 1; min-width: 80px; padding: 8px 4px; font-size: 11px; font-weight: 700; border-radius: 10px; cursor: pointer; border: none; transition: all 0.2s; background: #f0f0f0; color: #888; text-align: center; }
@@ -109,6 +122,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="header">
     <h1>Realize Festas 🛒</h1>
     <p>Controle de Estoque</p>
+  </div>
+
+  <div class="sync-bar online" id="syncBar">
+    <span class="sync-dot"></span>
+    <span id="syncMsg">Conectado</span>
   </div>
 
   <div class="main-tabs">
@@ -331,8 +349,6 @@ function renderLista() {
   if(total > 0){ badge.style.display='inline'; badge.textContent=total; }
   else badge.style.display='none';
 }
-
-// RENDER HISTORICO
 async function renderHistorico() {
   const div = document.getElementById('listaHistorico');
   div.innerHTML = '<div class="empty">Carregando...</div>';
@@ -389,21 +405,40 @@ window.removerItem = (cat,item) => {
 
 window.filtrar = (cat) => renderCat(cat);
 
-window.salvarCat = async (cat) => {
-  const btn = document.getElementById('btnSalvar-'+cat);
-  btn.disabled=true; btn.textContent='Salvando...';
-  estado[cat].lista = Object.entries(estado[cat].qtds).filter(([,v])=>v>0).map(([nome,qty])=>({nome,qty}));
-  await salvarFirebase();
-  document.getElementById('status-'+cat).textContent='✓ Salvo!';
-  setTimeout(()=>document.getElementById('status-'+cat).textContent='',2500);
-  btn.disabled=false; btn.textContent='Salvar lista →';
-  renderLista();
-}
-
 window.removerDaLista = async (cat,i) => {
   estado[cat].lista.splice(i,1);
   renderLista();
-  await salvarFirebase();
+  await salvarTudo();
+}
+
+// ── OFFLINE-FIRST ──────────────────────────────────────────────
+const LS_KEY = 'realize_estoque_v1';
+let _syncPending = false;
+
+function salvarLocal() {
+  try {
+    const payload = { ts: Date.now() };
+    Object.keys(CATS).forEach(cat => {
+      payload[cat] = { visiveis: estado[cat].visiveis, qtds: estado[cat].qtds, lista: estado[cat].lista };
+    });
+    payload.obs = obsTexto;
+    localStorage.setItem(LS_KEY, JSON.stringify(payload));
+  } catch(e) { console.warn('localStorage indisponível', e); }
+}
+
+function carregarLocal() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function setSyncBar(state, msg) {
+  const bar = document.getElementById('syncBar');
+  const txt = document.getElementById('syncMsg');
+  bar.className = 'sync-bar ' + state;
+  txt.textContent = msg;
 }
 
 async function salvarFirebase() {
@@ -415,10 +450,67 @@ async function salvarFirebase() {
   await set(ref(db,'estoque2/dados'), payload);
 }
 
+async function salvarTudo() {
+  // 1. Salva local SEMPRE (instantâneo, sem internet)
+  salvarLocal();
+
+  // 2. Tenta enviar para Firebase
+  if (!navigator.onLine) {
+    _syncPending = true;
+    setSyncBar('offline', '📴 Offline — salvo localmente');
+    return;
+  }
+  try {
+    setSyncBar('syncing', '☁️ Sincronizando...');
+    await salvarFirebase();
+    _syncPending = false;
+    setSyncBar('online', '✓ Sincronizado');
+    setTimeout(() => { if(!_syncPending) setSyncBar('online','Conectado'); }, 2000);
+  } catch(e) {
+    _syncPending = true;
+    setSyncBar('pending', '⚠️ Erro — será sincronizado em breve');
+  }
+}
+
+async function sincronizarPendentes() {
+  if (!_syncPending) return;
+  try {
+    setSyncBar('syncing', '☁️ Sincronizando pendências...');
+    await salvarFirebase();
+    _syncPending = false;
+    setSyncBar('online', '✓ Dados sincronizados!');
+    setTimeout(() => setSyncBar('online','Conectado'), 2500);
+  } catch(e) {
+    setSyncBar('pending', '⚠️ Falha na sincronização');
+  }
+}
+
+// Detecta volta de internet
+window.addEventListener('online',  () => sincronizarPendentes());
+window.addEventListener('offline', () => setSyncBar('offline', '📴 Offline — salvando localmente'));
+
+// ── AÇÕES ──────────────────────────────────────────────────────
+window.salvarCat = async (cat) => {
+  const btn = document.getElementById('btnSalvar-'+cat);
+  btn.disabled=true; btn.textContent='Salvando...';
+  try {
+    estado[cat].lista = Object.entries(estado[cat].qtds).filter(([,v])=>v>0).map(([nome,qty])=>({nome,qty}));
+    await salvarTudo();
+    document.getElementById('status-'+cat).textContent = _syncPending ? '💾 Salvo localmente' : '✓ Salvo!';
+    setTimeout(()=>document.getElementById('status-'+cat).textContent='',2500);
+    renderLista();
+  } catch(e) {
+    document.getElementById('status-'+cat).textContent='⚠️ Erro ao salvar. Tente novamente.';
+    setTimeout(()=>document.getElementById('status-'+cat).textContent='',3000);
+  } finally {
+    btn.disabled=false; btn.textContent='Salvar lista →';
+  }
+}
+
 document.getElementById('obsLista').addEventListener('input', function(){
   obsTexto=this.value;
   clearTimeout(window._t);
-  window._t=setTimeout(salvarFirebase,1000);
+  window._t=setTimeout(salvarTudo,1000);
 });
 
 // REINICIAR
@@ -451,13 +543,14 @@ window.reiniciarCat = async () => {
     estado[c].visiveis = [...CATS[c]];
     estado[c].qtds = {};
     estado[c].lista = [];
-    document.getElementById('busca-'+c).value='';
+    const buscaEl = document.getElementById('busca-'+c);
+    if(buscaEl) buscaEl.value='';
     renderCat(c);
-    document.getElementById('status-'+c).textContent='✓ Reiniciado!';
-    setTimeout(()=>document.getElementById('status-'+c).textContent='',2500);
+    const statusEl = document.getElementById('status-'+c);
+    if(statusEl){ statusEl.textContent='✓ Reiniciado!'; setTimeout(()=>statusEl.textContent='',2500); }
   });
   if(cat==='TODOS') obsTexto='';
-  await salvarFirebase();
+  await salvarTudo();
   renderLista();
 }
 
@@ -530,7 +623,7 @@ window.confirmarReusar = async () => {
     });
     renderCat(cat);
   });
-  await salvarFirebase();
+  await salvarTudo();
   alert('✓ Quantidades restauradas! Verifique cada categoria.');
 }
 
@@ -573,7 +666,7 @@ window.reiniciarTodas = async () => {
     if(document.getElementById('busca-'+c)) document.getElementById('busca-'+c).value='';
   });
   obsTexto = '';
-  await salvarFirebase();
+  await salvarTudo();
   renderCat('Bar');
   renderLista();
   alert('✓ Todas as listas foram reiniciadas e salvas no histórico!');
@@ -592,26 +685,59 @@ window.irCat = (cat) => {
 }
 
 // CARREGAR
+function aplicarDados(d) {
+  Object.keys(CATS).forEach(cat => {
+    if(d[cat]){
+      if(d[cat].visiveis) estado[cat].visiveis = d[cat].visiveis;
+      if(d[cat].qtds)     estado[cat].qtds     = d[cat].qtds;
+      if(d[cat].lista)    estado[cat].lista    = d[cat].lista;
+    }
+  });
+  if(d.obs) obsTexto = d.obs;
+}
+
 async function carregarDados() {
+  // Carrega local primeiro (instantâneo — evita tela em branco)
+  const local = carregarLocal();
+  if (local) {
+    aplicarDados(local);
+    renderCat('Bar');
+    atualizarBadge();
+    setSyncBar('pending', '📂 Dados locais carregados...');
+  }
+
+  // Tenta buscar do Firebase (mais recente)
+  if (!navigator.onLine) {
+    setSyncBar('offline', '📴 Offline — usando dados locais');
+    _syncPending = true;
+    return;
+  }
   try {
     const snap = await get(ref(db,'estoque2/dados'));
     if(snap.exists()){
       const d = snap.val();
-      Object.keys(CATS).forEach(cat => {
-        if(d[cat]){
-          if(d[cat].visiveis) estado[cat].visiveis = d[cat].visiveis;
-          if(d[cat].qtds) estado[cat].qtds = d[cat].qtds;
-          if(d[cat].lista) estado[cat].lista = d[cat].lista;
-        }
-      });
-      if(d.obs) obsTexto = d.obs;
+      // Usa Firebase se for mais recente OU se não tinha local
+      const localTs = local ? (local.ts||0) : 0;
+      // Firebase não tem timestamp, então sempre prefere Firebase quando online
+      aplicarDados(d);
+      salvarLocal(); // atualiza local com dado do Firebase
     }
-  } catch(e){}
+    setSyncBar('online', 'Conectado');
+    _syncPending = false;
+  } catch(e) {
+    if (!local) setSyncBar('offline', '📴 Sem conexão — sem dados locais');
+    else setSyncBar('offline', '📴 Offline — usando dados locais');
+    _syncPending = true;
+  }
   renderCat('Bar');
-  // Atualiza badge
+  atualizarBadge();
+}
+
+function atualizarBadge() {
   let total = Object.keys(CATS).reduce((s,c)=>s+estado[c].lista.length,0);
   const badge = document.getElementById('badgeTotal');
   if(total>0){badge.style.display='inline';badge.textContent=total;}
+  else badge.style.display='none';
 }
 
 carregarDados();
