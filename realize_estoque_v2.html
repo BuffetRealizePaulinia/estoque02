@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Realize — Estoque</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f0; min-height: 100vh; padding: 1rem; }
+.app { max-width: 640px; margin: 0 auto; background: white; border-radius: 16px; padding: 1.2rem; box-shadow: 0 2px 16px rgba(0,0,0,0.08); }
+.header { text-align: center; padding: 0.6rem 0 0.8rem; border-bottom: 1px solid #eee; margin-bottom: 1rem; }
+.header h1 { font-size: 16px; font-weight: 700; color: #1a1a1a; }
+.header p { font-size: 11px; color: #888; margin-top: 2px; }
+
+/* SYNC STATUS BAR */
+.sync-bar { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 8px; margin-bottom: 0.8rem; transition: all 0.3s; }
+.sync-bar.online  { background: #e8f5e9; color: #2E7D32; }
+.sync-bar.offline { background: #fff3e0; color: #E65100; }
+.sync-bar.syncing { background: #e3f2fd; color: #1565C0; }
+.sync-bar.pending { background: #fff8e1; color: #F57F17; }
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sync-bar.online  .sync-dot { background: #43A047; }
+.sync-bar.offline .sync-dot { background: #EF6C00; animation: pulse 1.2s infinite; }
+.sync-bar.syncing .sync-dot { background: #1976D2; animation: pulse 0.6s infinite; }
+.sync-bar.pending .sync-dot { background: #F9A825; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* TABS PRINCIPAIS */
+.main-tabs { display: flex; gap: 5px; margin-bottom: 1rem; flex-wrap: wrap; }
+.main-tab { flex: 1; min-width: 80px; padding: 8px 4px; font-size: 11px; font-weight: 700; border-radius: 10px; cursor: pointer; border: none; transition: all 0.2s; background: #f0f0f0; color: #888; text-align: center; }
+.main-tab.active { color: white; }
+.main-tab[data-cat="Bar"].active { background: #2196F3; }
+.main-tab[data-cat="Cozinha"].active { background: #FF7043; }
+.main-tab[data-cat="Descartaveis"].active { background: #9C27B0; }
+.main-tab[data-cat="ESTOQUE"].active { background: #1D9E75; }
+.main-tab[data-cat="Diversos"].active { background: #F9A825; }
+.main-tab[data-cat="Lista"].active { background: #37474F; }
+.main-tab[data-cat="Historico"].active { background: #546E7A; }
+
+.page { display: none; }
+.page.v { display: block; }
+
+/* ESTOQUE */
+.search-box { margin-bottom: 0.8rem; }
+.search-box input { width: 100%; padding: 9px 12px; font-size: 14px; border: 1px solid #ddd; border-radius: 10px; font-family: inherit; }
+.search-box input:focus { outline: none; border-color: #1D9E75; }
+.item-row { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-bottom: 0.5px solid #f0f0f0; }
+.item-row:last-child { border-bottom: none; }
+.item-name { flex: 1; font-size: 14px; color: #1a1a1a; }
+.qty-input { width: 60px; padding: 6px 8px; font-size: 14px; border: 1px solid #ddd; border-radius: 8px; text-align: center; font-family: inherit; }
+.qty-input:focus { outline: none; border-color: #1D9E75; }
+.btn-x { width: 30px; height: 30px; border-radius: 8px; border: none; background: #fff0f0; color: #e53935; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.btn-x:active { background: #ffcdd2; }
+.contador { font-size: 11px; color: #888; margin-bottom: 0.5rem; }
+.btn-salvar { width: 100%; padding: 12px; font-size: 14px; font-weight: 700; border-radius: 12px; border: none; background: #1D9E75; color: white; cursor: pointer; margin-top: 1rem; }
+.btn-salvar:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-reiniciar { width: 100%; padding: 11px; font-size: 13px; font-weight: 700; border-radius: 12px; border: 2px solid #e53935; background: white; color: #e53935; cursor: pointer; margin-top: 0.6rem; }
+.status { font-size: 12px; color: #1D9E75; text-align: center; margin-top: 6px; min-height: 16px; }
+
+/* LISTA UNIFICADA */
+.cat-section { margin-bottom: 1rem; border-radius: 10px; overflow: hidden; }
+.cat-header { padding: 8px 12px; font-size: 12px; font-weight: 700; color: white; }
+.cat-header.bar { background: #2196F3; }
+.cat-header.cozinha { background: #FF7043; }
+.cat-header.descartaveis { background: #9C27B0; }
+.cat-header.estoque { background: #1D9E75; }
+.cat-header.diversos { background: #F9A825; color: #333; }
+.cat-body { border: 1px solid #eee; border-top: none; border-radius: 0 0 10px 10px; }
+.lista-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 0.5px solid #f5f5f5; }
+.lista-item:last-child { border-bottom: none; }
+.lista-qty { color: white; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 2px 8px; min-width: 38px; text-align: center; }
+.lista-qty.bar { background: #2196F3; }
+.lista-qty.cozinha { background: #FF7043; }
+.lista-qty.descartaveis { background: #9C27B0; }
+.lista-qty.estoque { background: #1D9E75; }
+.lista-qty.diversos { background: #F9A825; color: #333; }
+.lista-nome { flex: 1; font-size: 14px; color: #1a1a1a; }
+.obs-box { margin-top: 1rem; }
+.obs-box label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px; }
+.obs-box textarea { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid #ddd; border-radius: 10px; font-family: inherit; resize: vertical; min-height: 70px; }
+.empty { text-align: center; padding: 2rem 1rem; color: #aaa; font-size: 14px; }
+
+/* HISTORICO */
+.hist-card { background: #f9f9f9; border: 1px solid #eee; border-radius: 12px; padding: 1rem; margin-bottom: 0.8rem; }
+.hist-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+.hist-data { font-size: 12px; font-weight: 700; color: #555; }
+.hist-actions { display: flex; gap: 6px; }
+.hist-btn { padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; cursor: pointer; border: none; }
+.hist-btn.copiar { background: #e3f2fd; color: #1565C0; }
+.hist-btn.reusar { background: #e8f5e9; color: #2E7D32; }
+.hist-btn.excluir { background: #ffebee; color: #c62828; }
+.hist-cat-label { font-size: 11px; font-weight: 700; color: white; padding: 2px 8px; border-radius: 4px; margin: 6px 0 3px; display: inline-block; }
+.hist-item { font-size: 13px; color: #333; padding: 2px 0; display: flex; gap: 8px; }
+.hist-qty { font-weight: 700; min-width: 28px; }
+.hist-obs { font-size: 12px; color: #888; margin-top: 6px; font-style: italic; }
+.hist-total { font-size: 11px; color: #888; margin-top: 4px; }
+
+/* MODAL */
+.modal-bg { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 100; }
+.modal-bg.v { display: flex; align-items: center; justify-content: center; }
+.modal { background: white; border-radius: 16px; padding: 1.5rem; max-width: 300px; width: 88%; text-align: center; }
+.modal h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.modal p { font-size: 13px; color: #666; margin-bottom: 1.2rem; line-height: 1.5; }
+.modal-btns { display: flex; gap: 10px; }
+.modal-btns button { flex: 1; padding: 11px; font-size: 13px; font-weight: 600; border-radius: 10px; cursor: pointer; border: none; }
+.btn-conf { background: #e53935; color: white; }
+.btn-canc { background: #f0f0f0; color: #333; }
+.badge-total { display: inline-block; background: #37474F; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
+.btn-reiniciar-todas { width: 100%; padding: 12px; font-size: 13px; font-weight: 700; border-radius: 12px; border: 2px solid #B71C1C; background: #fff; color: #B71C1C; cursor: pointer; margin-top: 0.5rem; }
+.btn-reiniciar-todas:active { background: #ffebee; }
+.hist-reusar-lista { padding: 8px 12px; border: 1px solid #eee; border-radius: 8px; margin: 4px 0; display: flex; align-items: center; gap: 8px; }
+.hist-reusar-lista .remove-hist-item { width: 24px; height: 24px; border-radius: 6px; border: none; background: #fff0f0; color: #e53935; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.modal-lg { max-width: 420px !important; text-align: left !important; }
+.modal-lg h3 { text-align: center; }
+.modal-scroll { max-height: 55vh; overflow-y: auto; margin-bottom: 1rem; }
+.conf-step { background: #fff3e0; border: 1px solid #FFB300; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; text-align: center; }
+.conf-step p { font-size: 14px; color: #333; margin-bottom: 0.8rem; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Realize Festas 🛒</h1>
+    <p>Controle de Estoque</p>
+  </div>
+
+  <div class="sync-bar online" id="syncBar">
+    <span class="sync-dot"></span>
+    <span id="syncMsg">Conectado</span>
+  </div>
+
+  <div class="main-tabs">
+    <button class="main-tab active" data-cat="Bar" onclick="irCat('Bar')">🍺 Bar</button>
+    <button class="main-tab" data-cat="Cozinha" onclick="irCat('Cozinha')">🍳 Cozinha</button>
+    <button class="main-tab" data-cat="Descartaveis" onclick="irCat('Descartaveis')">🧴 Descart.</button>
+    <button class="main-tab" data-cat="ESTOQUE" onclick="irCat('ESTOQUE')">🎈 Estoque</button>
+    <button class="main-tab" data-cat="Diversos" onclick="irCat('Diversos')">📦 Diversos</button>
+    <button class="main-tab" data-cat="Lista" onclick="irCat('Lista')">🛒 Lista <span id="badgeTotal" class="badge-total" style="display:none">0</span></button>
+    <button class="main-tab" data-cat="Historico" onclick="irCat('Historico')">📋 Hist.</button>
+  </div>
+
+  <!-- PÁGINAS DE ESTOQUE -->
+  <div class="page v" id="pag-Bar">
+    <div class="search-box"><input type="text" id="busca-Bar" placeholder="🔍 Buscar..." oninput="filtrar('Bar')"></div>
+    <div class="contador" id="contador-Bar"></div>
+    <div id="lista-Bar"></div>
+    <button class="btn-salvar" id="btnSalvar-Bar" onclick="salvarCat('Bar')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('Bar')">🔄 Reiniciar Bar</button>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
+    <div class="status" id="status-Bar"></div>
+  </div>
+
+  <div class="page" id="pag-Cozinha">
+    <div class="search-box"><input type="text" id="busca-Cozinha" placeholder="🔍 Buscar..." oninput="filtrar('Cozinha')"></div>
+    <div class="contador" id="contador-Cozinha"></div>
+    <div id="lista-Cozinha"></div>
+    <button class="btn-salvar" id="btnSalvar-Cozinha" onclick="salvarCat('Cozinha')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('Cozinha')">🔄 Reiniciar Cozinha</button>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
+    <div class="status" id="status-Cozinha"></div>
+  </div>
+
+  <div class="page" id="pag-Descartaveis">
+    <div class="search-box"><input type="text" id="busca-Descartaveis" placeholder="🔍 Buscar..." oninput="filtrar('Descartaveis')"></div>
+    <div class="contador" id="contador-Descartaveis"></div>
+    <div id="lista-Descartaveis"></div>
+    <button class="btn-salvar" id="btnSalvar-Descartaveis" onclick="salvarCat('Descartaveis')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('Descartaveis')">🔄 Reiniciar Descartáveis</button>
+    <div class="status" id="status-Descartaveis"></div>
+  </div>
+
+  <div class="page" id="pag-ESTOQUE">
+    <div class="search-box"><input type="text" id="busca-ESTOQUE" placeholder="🔍 Buscar..." oninput="filtrar('ESTOQUE')"></div>
+    <div class="contador" id="contador-ESTOQUE"></div>
+    <div id="lista-ESTOQUE"></div>
+    <button class="btn-salvar" id="btnSalvar-ESTOQUE" onclick="salvarCat('ESTOQUE')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('ESTOQUE')">🔄 Reiniciar Estoque</button>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
+    <div class="status" id="status-ESTOQUE"></div>
+  </div>
+
+  <div class="page" id="pag-Diversos">
+    <div class="search-box"><input type="text" id="busca-Diversos" placeholder="🔍 Buscar..." oninput="filtrar('Diversos')"></div>
+    <div class="contador" id="contador-Diversos"></div>
+    <div id="lista-Diversos"></div>
+    <button class="btn-salvar" id="btnSalvar-Diversos" onclick="salvarCat('Diversos')">Salvar lista →</button>
+    <button class="btn-reiniciar" onclick="confirmarReiniciar('Diversos')">🔄 Reiniciar Diversos</button>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
+    <div class="status" id="status-Diversos"></div>
+  </div>
+
+  <!-- LISTA UNIFICADA -->
+  <div class="page" id="pag-Lista">
+    <div id="listaUnificada"></div>
+    <div class="obs-box">
+      <label>Anotações</label>
+      <textarea id="obsLista" placeholder="Observações gerais..."></textarea>
+    </div>
+    <button class="btn-reiniciar-todas" onclick="pedirReiniciarTodas()">🔄 Reiniciar TODAS as listas</button>
+    <div class="status" id="status-Lista"></div>
+  </div>
+
+  <!-- HISTÓRICO -->
+  <div class="page" id="pag-Historico">
+    <div id="listaHistorico"></div>
+  </div>
+</div>
+
+<!-- MODAIS -->
+<div class="modal-bg" id="modalReiniciar">
+  <div class="modal">
+    <h3>Reiniciar lista?</h3>
+    <p id="modalReiniciarTexto">A lista será salva no histórico. Todos os itens voltarão e as quantidades serão zeradas.</p>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalReiniciar')">Cancelar</button>
+      <button class="btn-conf" onclick="reiniciarCat()">Reiniciar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalExcluirHist">
+  <div class="modal">
+    <h3>Excluir histórico?</h3>
+    <p>Esta ação não pode ser desfeita.</p>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalExcluirHist')">Cancelar</button>
+      <button class="btn-conf" onclick="confirmarExcluirHist()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REUSAR HISTORICO -->
+<div class="modal-bg" id="modalReusarHist">
+  <div class="modal modal-lg">
+    <h3>♻️ Reusar lista</h3>
+    <p style="font-size:12px;color:#888;margin-bottom:0.8rem;text-align:center">Remova os itens que não quer reusar, depois confirme.</p>
+    <div class="modal-scroll" id="reusarListaItens"></div>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalReusarHist')">Cancelar</button>
+      <button class="hist-btn reusar" style="flex:1;padding:11px;font-size:13px;font-weight:700;border-radius:10px;" onclick="confirmarReusar()">✓ Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REINICIAR TODAS - PASSO 1 -->
+<div class="modal-bg" id="modalTodasP1">
+  <div class="modal">
+    <div class="conf-step">
+      <p>⚠️ <strong>Atenção!</strong><br>Você está prestes a reiniciar <strong>TODAS</strong> as 5 listas de estoque.<br><br>Todas as quantidades e itens removidos serão zerados.</p>
+      <p style="font-size:12px;color:#888">Esta ação salvará as listas atuais no histórico antes de zerar.</p>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalTodasP1')">Cancelar</button>
+      <button class="btn-conf" onclick="irPassoDois()">Continuar →</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REINICIAR TODAS - PASSO 2 -->
+<div class="modal-bg" id="modalTodasP2">
+  <div class="modal">
+    <div class="conf-step" style="background:#ffebee;border-color:#e53935">
+      <p>🚨 <strong>Última confirmação!</strong><br>Tem certeza absoluta que deseja reiniciar <strong>TODAS as listas</strong>?<br><br>Esta ação não pode ser desfeita.</p>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-canc" onclick="fecharModal('modalTodasP2')">Não, cancelar</button>
+      <button class="btn-conf" onclick="reiniciarTodas()">Sim, reiniciar tudo</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCIiiqa84itJt67tpORk0r8paAOdd9T45E",
+  authDomain: "realize-estoque.firebaseapp.com",
+  databaseURL: "https://realize-estoque-default-rtdb.firebaseio.com",
+  projectId: "realize-estoque",
+  storageBucket: "realize-estoque.firebasestorage.app",
+  messagingSenderId: "1043336570917",
+  appId: "1:1043336570917:web:dee8f144016f0c692d37cc"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db = getDatabase(fbApp);
+const auth = getAuth(fbApp);
+
+const CATS = {
+  Bar: ["COCA COLA 2LTS","GUARANA 2 LTS","COCA ZERO 2 LTS","AGUA 1,5 LTS","SUCO LARANJA","SUCO UVA","PAPEL BAR"],
+  Cozinha: ["SAZOM CARNE","CANELA","OREGANO","MANGERICAO","OLEO","PAO DOG","PIPOCA DOCE","PAO DE HAMB.","SAZOM SALADAS","MASSA PIZZA","PAPEL COAR CAFÉ","ARROZ","SAL","BATATA PALHA","PO CAFÉ","ACUCAR","FARINHA YOKI","FEIJAO","MAIONESE","CAT CHUP GRANDE","MOSTARDA","AZEITE","MOLHO TOMATE","CREME DE LEITE","AZEITONAS","GELATINA MORANGO","GELATINA AZUL","GELATINA UVA","GELATINA DENTADURA","GELATINA BANANA","CATCHUP SACHE","PIMENTA","QUEIJO RALADO","PALITO DENTE","BATOM","FERMENTO","LEITE","VINAGRE","PIPOCA","MACARRAO","MOLHO SUGO","MAISENA","FARINHA TRIGO","CALABRESA","TOMATE","CEBOLA","LIMAO","CENOURA","ALHO","BATATA PURE","OVOS","MANTEIGA","QUEIJO CHEDDAR","CHEIRO VERDE","MUSSARELA","PRESUNTO","ALFACE","MISTURA","BATATA FRITAS","SALCIXA","HAMBURGUER","PAO DE QUEIJO","GELO","CHURROS","GELADINHO","PEITO DE FRANGO","SALGADOS ASSADOS","PASTEL","COXINHA","PRES. E QUEIJO","KIBE","CROQUETE","BOL QUEIJO","BOL CARNE","MILHO","REQUEIJAO"],
+  Descartaveis: ["PAPEL ROLO","DESINFETANTE","KIT MAE","KIT DOCES MAE","GARFO PIZZA","PAPEL ALUM","PLASTICO PIZZA","PLASTICO FILME","PERFLEX","GARFO BOLO","PRATINHO BOLO","PRATO JANTA","TOUCA","COPO GELATINA","COPO DESC","COLHER GELATINA","SACOLA KIT MÃE","LUVA P","LUVA M","LUVA G","LUVA GG","SACO HAMB","SACO PIPOCA","SACO PLASTICO","PAPEL SECA MAO","SANITO 50L","SANITO REFORÇADO","SANITO BANHEIRO","BOMBRIL","BOM AR","VENENO","DETERGENTE","CANDIDA","BUCHA AMARELA","PAPEL HIGIENICO","SABONETE LIQUIDO","VEJA","ALCOOL GEL","ALGOOL LIQUIDO","SABAO PEDRA"],
+  ESTOQUE: ["FITILHO","VELA 0","VELA 1","VELA 2","VELA 3","VELA 4","VELA 5","VELA 6","VELA 7","VELA 8","VELA 9","BALÃO BRANCO","BALÃO PRETO","BALÃO VERMELHO","BALÃO AZUL COBALTO","BALÃO AZUL TURQUEZA","BALÃO AZUL BB","BALÃO ROSA BB","BALÃO TUTIFRUTTI","BALÃO PINK","BALÃO AMARELO","BALÃO LARANJA","BALÃO VERDE FOLHA","BALÃO VERDE MAÇA","BALÃO ROXO","BALÃO LILAS","BALÃO MARROM"],
+  Diversos: ["FONE RADIO","PILHAS","ETIQUETA PRESENTE","ETIQUETA VALIDADE","FITILHO","BAND-AID","REMEDIOS","FITA ADESIVA AMARELA","FITA ADESIVA TRANSP.","FOLHA DE PRESENÇA","FOLHA DE CONVIDADOS"]
+};
+
+const CAT_CORES = { Bar:'bar', Cozinha:'cozinha', Descartaveis:'descartaveis', ESTOQUE:'estoque', Diversos:'diversos' };
+const CAT_NOMES = { Bar:'🍺 Bar', Cozinha:'🍳 Cozinha', Descartaveis:'🧴 Descartáveis', ESTOQUE:'🎈 Estoque', Diversos:'📦 Diversos' };
+
+// Estado por categoria
+let estado = {};
+Object.keys(CATS).forEach(cat => {
+  estado[cat] = { visiveis: [...CATS[cat]], qtds: {}, lista: [] };
+});
+let obsTexto = '';
+let catReiniciar = null;
+let histKeyExcluir = null;
+
+// RENDER ESTOQUE
+function renderCat(cat) {
+  const busca = (document.getElementById('busca-'+cat)?.value||'').toLowerCase();
+  const e = estado[cat];
+  const filtrados = CATS[cat].filter(i => e.visiveis.includes(i) && i.toLowerCase().includes(busca));
+  document.getElementById('contador-'+cat).textContent = `${e.visiveis.length} itens`;
+  document.getElementById('lista-'+cat).innerHTML = filtrados.length ? filtrados.map(item => `
+    <div class="item-row">
+      <span class="item-name">${item}</span>
+      <input class="qty-input" type="number" min="0" placeholder="Qtd" value="${e.qtds[item]||''}"
+        oninput="setQtd('${cat}','${item.replace(/'/g,"\\'")}',this.value)">
+      <button class="btn-x" onclick="removerItem('${cat}','${item.replace(/'/g,"\\'")}')">✕</button>
+    </div>`).join('') : '<div class="empty">Nenhum item</div>';
+}
+
+// RENDER LISTA UNIFICADA
+function renderLista() {
+  let total = 0;
+  let html = '';
+  Object.keys(CATS).forEach(cat => {
+    const itens = estado[cat].lista;
+    if(itens.length === 0) return;
+    total += itens.length;
+    const cor = CAT_CORES[cat];
+    html += `<div class="cat-section">
+      <div class="cat-header ${cor}">${CAT_NOMES[cat]} — ${itens.length} itens</div>
+      <div class="cat-body">
+        ${itens.map((it,i) => `
+          <div class="lista-item">
+            <span class="lista-qty ${cor}">${it.qty}</span>
+            <span class="lista-nome">${it.nome}</span>
+            <button class="btn-x" onclick="removerDaLista('${cat}',${i})">✕</button>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  });
+  document.getElementById('listaUnificada').innerHTML = html || '<div class="empty">Nenhum item na lista.<br>Preencha as quantidades nas categorias.</div>';
+  document.getElementById('obsLista').value = obsTexto;
+  // Badge
+  const badge = document.getElementById('badgeTotal');
+  if(total > 0){ badge.style.display='inline'; badge.textContent=total; }
+  else badge.style.display='none';
+}
+async function renderHistorico() {
+  const div = document.getElementById('listaHistorico');
+  div.innerHTML = '<div class="empty">Carregando...</div>';
+  try {
+    const snap = await get(ref(db,'estoque2/historico'));
+    if(!snap.exists()){ div.innerHTML='<div class="empty">Nenhum histórico ainda.</div>'; return; }
+    const dados = snap.val();
+    const chaves = Object.keys(dados).reverse();
+    div.innerHTML = chaves.map(k => {
+      const h = dados[k];
+      const cats = h.categorias || {};
+      let itensHtml = '';
+      Object.keys(cats).forEach(cat => {
+        const itens = cats[cat] || [];
+        if(!itens.length) return;
+        const cor = CAT_CORES[cat] || 'estoque';
+        itensHtml += `<span class="hist-cat-label" style="background:${corHex(cat)}">${CAT_NOMES[cat]||cat}</span>`;
+        itensHtml += itens.map(it=>`<div class="hist-item"><span class="hist-qty" style="color:${corHex(cat)}">${it.qty}x</span><span>${it.nome}</span></div>`).join('');
+      });
+      const totalItens = Object.values(cats).reduce((s,arr)=>s+(arr||[]).length,0);
+      return `<div class="hist-card">
+        <div class="hist-header">
+          <span class="hist-data">📅 ${h.data} <span style="font-weight:400;color:#888">${totalItens} itens</span></span>
+          <div class="hist-actions">
+            <button class="hist-btn copiar" onclick="copiarHist('${k}')">📋 Copiar</button>
+            <button class="hist-btn reusar" onclick="reusarHist('${k}')">♻️ Reusar</button>
+            <button class="hist-btn excluir" onclick="pedirExcluirHist('${k}')">🗑️ Excluir</button>
+          </div>
+        </div>
+        ${itensHtml}
+        ${h.obs?`<div class="hist-obs">📝 ${h.obs}</div>`:''}
+      </div>`;
+    }).join('');
+    window._histDados = dados;
+  } catch(e){ div.innerHTML='<div class="empty">Erro ao carregar.</div>'; }
+}
+
+function corHex(cat){
+  const m = {Bar:'#2196F3',Cozinha:'#FF7043',Descartaveis:'#9C27B0',ESTOQUE:'#1D9E75',Diversos:'#F9A825'};
+  return m[cat]||'#666';
+}
+
+// AÇÕES
+window.setQtd = (cat,item,val) => {
+  if(val && parseInt(val)>0) estado[cat].qtds[item]=parseInt(val);
+  else delete estado[cat].qtds[item];
+}
+
+window.removerItem = (cat,item) => {
+  estado[cat].visiveis = estado[cat].visiveis.filter(i=>i!==item);
+  delete estado[cat].qtds[item];
+  renderCat(cat);
+}
+
+window.filtrar = (cat) => renderCat(cat);
+
+window.removerDaLista = async (cat,i) => {
+  estado[cat].lista.splice(i,1);
+  renderLista();
+  await salvarTudo();
+}
+
+// ── OFFLINE-FIRST ──────────────────────────────────────────────
+const LS_KEY = 'realize_estoque_v1';
+let _syncPending = false;
+
+function salvarLocal() {
+  try {
+    const payload = { ts: Date.now() };
+    Object.keys(CATS).forEach(cat => {
+      payload[cat] = { visiveis: estado[cat].visiveis, qtds: estado[cat].qtds, lista: estado[cat].lista };
+    });
+    payload.obs = obsTexto;
+    localStorage.setItem(LS_KEY, JSON.stringify(payload));
+  } catch(e) { console.warn('localStorage indisponível', e); }
+}
+
+function carregarLocal() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function setSyncBar(state, msg) {
+  const bar = document.getElementById('syncBar');
+  const txt = document.getElementById('syncMsg');
+  bar.className = 'sync-bar ' + state;
+  txt.textContent = msg;
+}
+
+async function salvarFirebase() {
+  const payload = {};
+  Object.keys(CATS).forEach(cat => {
+    payload[cat] = { visiveis: estado[cat].visiveis, qtds: estado[cat].qtds, lista: estado[cat].lista };
+  });
+  payload.obs = obsTexto;
+  await set(ref(db,'estoque2/dados'), payload);
+}
+
+async function salvarTudo() {
+  // 1. Salva local SEMPRE (instantâneo, sem internet)
+  salvarLocal();
+
+  // 2. Tenta enviar para Firebase
+  if (!navigator.onLine) {
+    _syncPending = true;
+    setSyncBar('offline', '📴 Offline — salvo localmente');
+    return;
+  }
+  try {
+    setSyncBar('syncing', '☁️ Sincronizando...');
+    await salvarFirebase();
+    _syncPending = false;
+    setSyncBar('online', '✓ Sincronizado');
+    setTimeout(() => { if(!_syncPending) setSyncBar('online','Conectado'); }, 2000);
+  } catch(e) {
+    _syncPending = true;
+    setSyncBar('pending', '⚠️ Erro — será sincronizado em breve');
+  }
+}
+
+async function sincronizarPendentes() {
+  if (!_syncPending) return;
+  try {
+    setSyncBar('syncing', '☁️ Sincronizando pendências...');
+    await salvarFirebase();
+    _syncPending = false;
+    setSyncBar('online', '✓ Dados sincronizados!');
+    setTimeout(() => setSyncBar('online','Conectado'), 2500);
+  } catch(e) {
+    setSyncBar('pending', '⚠️ Falha na sincronização');
+  }
+}
+
+// Detecta volta de internet
+window.addEventListener('online',  () => sincronizarPendentes());
+window.addEventListener('offline', () => setSyncBar('offline', '📴 Offline — salvando localmente'));
+
+// ── AÇÕES ──────────────────────────────────────────────────────
+window.salvarCat = async (cat) => {
+  const btn = document.getElementById('btnSalvar-'+cat);
+  btn.disabled=true; btn.textContent='Salvando...';
+  try {
+    estado[cat].lista = Object.entries(estado[cat].qtds).filter(([,v])=>v>0).map(([nome,qty])=>({nome,qty}));
+    await salvarTudo();
+    document.getElementById('status-'+cat).textContent = _syncPending ? '💾 Salvo localmente' : '✓ Salvo!';
+    setTimeout(()=>document.getElementById('status-'+cat).textContent='',2500);
+    renderLista();
+  } catch(e) {
+    document.getElementById('status-'+cat).textContent='⚠️ Erro ao salvar. Tente novamente.';
+    setTimeout(()=>document.getElementById('status-'+cat).textContent='',3000);
+  } finally {
+    btn.disabled=false; btn.textContent='Salvar lista →';
+  }
+}
+
+document.getElementById('obsLista').addEventListener('input', function(){
+  obsTexto=this.value;
+  clearTimeout(window._t);
+  window._t=setTimeout(salvarTudo,1000);
+});
+
+// REINICIAR
+window.confirmarReiniciar = (cat) => {
+  catReiniciar = cat;
+  document.getElementById('modalReiniciarTexto').textContent =
+    cat === 'TODOS'
+    ? 'Todas as listas serão salvas no histórico e zeradas.'
+    : `A lista de ${CAT_NOMES[cat]||cat} será salva no histórico e zerada.`;
+  document.getElementById('modalReiniciar').classList.add('v');
+}
+
+window.reiniciarCat = async () => {
+  fecharModal('modalReiniciar');
+  const cat = catReiniciar;
+  const agora = new Date();
+  const data = agora.toLocaleDateString('pt-BR')+' '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+  // Salva no histórico
+  const catsParaSalvar = cat === 'TODOS' ? Object.keys(CATS) : [cat];
+  const temItens = catsParaSalvar.some(c => estado[c].lista.length > 0);
+  if(temItens || obsTexto) {
+    const categorias = {};
+    catsParaSalvar.forEach(c => { categorias[c] = estado[c].lista; });
+    await push(ref(db,'estoque2/historico'),{data, categorias, obs:obsTexto, salvoEm:agora.toISOString()});
+  }
+
+  // Reinicia
+  catsParaSalvar.forEach(c => {
+    estado[c].visiveis = [...CATS[c]];
+    estado[c].qtds = {};
+    estado[c].lista = [];
+    const buscaEl = document.getElementById('busca-'+c);
+    if(buscaEl) buscaEl.value='';
+    renderCat(c);
+    const statusEl = document.getElementById('status-'+c);
+    if(statusEl){ statusEl.textContent='✓ Reiniciado!'; setTimeout(()=>statusEl.textContent='',2500); }
+  });
+  if(cat==='TODOS') obsTexto='';
+  await salvarTudo();
+  renderLista();
+}
+
+// HISTÓRICO AÇÕES
+window.copiarHist = (key) => {
+  const h = window._histDados[key];
+  const cats = h.categorias || {};
+  let texto = `📋 Lista de Compras — ${h.data}\n\n`;
+  Object.keys(cats).forEach(cat => {
+    const itens = cats[cat]||[];
+    if(!itens.length) return;
+    texto += `${CAT_NOMES[cat]||cat}:\n`;
+    itens.forEach(it => { texto += `  ${it.qty}x ${it.nome}\n`; });
+    texto += '\n';
+  });
+  if(h.obs) texto += `📝 ${h.obs}`;
+  navigator.clipboard.writeText(texto).then(()=>alert('✓ Lista copiada!')).catch(()=>alert('Copie manualmente:\n'+texto));
+}
+
+let reusarKeyAtual = null;
+let reusarItensTemp = {};
+
+window.reusarHist = (key) => {
+  reusarKeyAtual = key;
+  const h = window._histDados[key];
+  const cats = h.categorias || {};
+  // Copia profunda dos itens para edição
+  reusarItensTemp = {};
+  Object.keys(cats).forEach(cat => {
+    reusarItensTemp[cat] = (cats[cat]||[]).map(it => ({...it}));
+  });
+  renderReusarModal();
+  document.getElementById('modalReusarHist').classList.add('v');
+}
+
+function renderReusarModal() {
+  let html = '';
+  Object.keys(reusarItensTemp).forEach(cat => {
+    const itens = reusarItensTemp[cat].filter(it => !it._removido);
+    if(!itens.length) return;
+    html += `<div style="margin-bottom:0.6rem">
+      <div style="font-size:11px;font-weight:700;color:white;background:${corHex(cat)};padding:3px 8px;border-radius:4px;display:inline-block;margin-bottom:4px">${CAT_NOMES[cat]||cat}</div>`;
+    reusarItensTemp[cat].forEach((it, i) => {
+      if(it._removido) return;
+      html += `<div class="hist-reusar-lista">
+        <span style="font-weight:700;color:${corHex(cat)};min-width:32px">${it.qty}x</span>
+        <span style="flex:1;font-size:13px">${it.nome}</span>
+        <button class="remove-hist-item" onclick="removerItemReusar('${cat}',${i})">✕</button>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  document.getElementById('reusarListaItens').innerHTML = html || '<div class="empty">Nenhum item</div>';
+}
+
+window.removerItemReusar = (cat, i) => {
+  reusarItensTemp[cat][i]._removido = true;
+  renderReusarModal();
+}
+
+window.confirmarReusar = async () => {
+  fecharModal('modalReusarHist');
+  Object.keys(reusarItensTemp).forEach(cat => {
+    if(!CATS[cat]) return;
+    reusarItensTemp[cat].filter(it => !it._removido).forEach(it => {
+      if(CATS[cat].includes(it.nome)){
+        estado[cat].qtds[it.nome] = it.qty;
+        if(!estado[cat].visiveis.includes(it.nome)) estado[cat].visiveis.push(it.nome);
+      }
+    });
+    renderCat(cat);
+  });
+  await salvarTudo();
+  alert('✓ Quantidades restauradas! Verifique cada categoria.');
+}
+
+window.pedirExcluirHist = (key) => {
+  histKeyExcluir = key;
+  document.getElementById('modalExcluirHist').classList.add('v');
+}
+
+window.confirmarExcluirHist = async () => {
+  fecharModal('modalExcluirHist');
+  await remove(ref(db,`estoque2/historico/${histKeyExcluir}`));
+  renderHistorico();
+}
+
+window.fecharModal = (id) => document.getElementById(id).classList.remove('v');
+
+window.pedirReiniciarTodas = () => {
+  document.getElementById('modalTodasP1').classList.add('v');
+}
+
+window.irPassoDois = () => {
+  fecharModal('modalTodasP1');
+  document.getElementById('modalTodasP2').classList.add('v');
+}
+
+window.reiniciarTodas = async () => {
+  fecharModal('modalTodasP2');
+  const agora = new Date();
+  const data = agora.toLocaleDateString('pt-BR')+' '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const temItens = Object.keys(CATS).some(c => estado[c].lista.length > 0);
+  if(temItens || obsTexto) {
+    const categorias = {};
+    Object.keys(CATS).forEach(c => { categorias[c] = estado[c].lista; });
+    await push(ref(db,'estoque2/historico'),{data, categorias, obs:obsTexto, salvoEm:agora.toISOString()});
+  }
+  Object.keys(CATS).forEach(c => {
+    estado[c].visiveis = [...CATS[c]];
+    estado[c].qtds = {};
+    estado[c].lista = [];
+    if(document.getElementById('busca-'+c)) document.getElementById('busca-'+c).value='';
+  });
+  obsTexto = '';
+  await salvarTudo();
+  renderCat('Bar');
+  renderLista();
+  alert('✓ Todas as listas foram reiniciadas e salvas no histórico!');
+}
+
+// NAVEGAÇÃO
+window.irCat = (cat) => {
+  document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-cat="${cat}"]`).classList.add('active');
+  Object.keys(CATS).forEach(c => document.getElementById('pag-'+c).classList.remove('v'));
+  document.getElementById('pag-Lista').classList.remove('v');
+  document.getElementById('pag-Historico').classList.remove('v');
+  if(cat==='Lista'){ document.getElementById('pag-Lista').classList.add('v'); renderLista(); }
+  else if(cat==='Historico'){ document.getElementById('pag-Historico').classList.add('v'); renderHistorico(); }
+  else { document.getElementById('pag-'+cat).classList.add('v'); renderCat(cat); }
+}
+
+// CARREGAR
+function aplicarDados(d) {
+  Object.keys(CATS).forEach(cat => {
+    if(d[cat]){
+      if(d[cat].visiveis) estado[cat].visiveis = d[cat].visiveis;
+      if(d[cat].qtds)     estado[cat].qtds     = d[cat].qtds;
+      if(d[cat].lista)    estado[cat].lista    = d[cat].lista;
+    }
+  });
+  if(d.obs) obsTexto = d.obs;
+}
+
+async function carregarDados() {
+  // Carrega local primeiro (instantâneo — evita tela em branco)
+  const local = carregarLocal();
+  if (local) {
+    aplicarDados(local);
+    renderCat('Bar');
+    atualizarBadge();
+    setSyncBar('pending', '📂 Dados locais carregados...');
+  }
+
+  // Tenta buscar do Firebase (mais recente)
+  if (!navigator.onLine) {
+    setSyncBar('offline', '📴 Offline — usando dados locais');
+    _syncPending = true;
+    return;
+  }
+  try {
+    const snap = await get(ref(db,'estoque2/dados'));
+    if(snap.exists()){
+      const d = snap.val();
+      // Usa Firebase se for mais recente OU se não tinha local
+      const localTs = local ? (local.ts||0) : 0;
+      // Firebase não tem timestamp, então sempre prefere Firebase quando online
+      aplicarDados(d);
+      salvarLocal(); // atualiza local com dado do Firebase
+    }
+    setSyncBar('online', 'Conectado');
+    _syncPending = false;
+  } catch(e) {
+    if (!local) setSyncBar('offline', '📴 Sem conexão — sem dados locais');
+    else setSyncBar('offline', '📴 Offline — usando dados locais');
+    _syncPending = true;
+  }
+  renderCat('Bar');
+  atualizarBadge();
+}
+
+function atualizarBadge() {
+  let total = Object.keys(CATS).reduce((s,c)=>s+estado[c].lista.length,0);
+  const badge = document.getElementById('badgeTotal');
+  if(total>0){badge.style.display='inline';badge.textContent=total;}
+  else badge.style.display='none';
+}
+
+// Login anônimo antes de acessar o banco
+signInAnonymously(auth)
+  .then(() => carregarDados())
+  .catch(e => { console.error('Auth error', e); carregarDados(); }); // tenta mesmo assim offline
+</script>
+</body>
+</html>
